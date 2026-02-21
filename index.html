@@ -1,1 +1,131 @@
-hi
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AnsHub Admin - Private</title>
+    <style>
+        :root { --accent: #ff0055; --bg: #0d0d0d; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; overflow: hidden; }
+        
+        /* Auth Screen */
+        #auth { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .pin-display { font-size: 30px; letter-spacing: 15px; margin-bottom: 20px; color: var(--accent); height: 40px; }
+        .numpad { display: grid; grid-template-columns: repeat(3, 80px); gap: 15px; }
+        .num-btn { width: 80px; height: 80px; border-radius: 50%; border: 1px solid #333; background: #1a1a1a; color: white; font-size: 24px; cursor: pointer; }
+        .num-btn:active { background: var(--accent); }
+
+        /* Main Panel */
+        #panel { display: none; height: 100vh; grid-template-columns: 1fr 1fr; }
+        .left { border-right: 1px solid #333; padding: 20px; overflow-y: auto; }
+        .right { padding: 20px; background: #111; }
+
+        .cmd-item { width: 100px; height: 100px; background: #222; border: 1px solid #444; margin: 5px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; text-align: center; font-size: 12px; border-radius: 10px; }
+        .cmd-item:hover { border-color: var(--accent); }
+
+        input, textarea { width: 100%; background: #000; border: 1px solid #333; color: white; padding: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        button.action { background: var(--accent); border: none; color: white; padding: 10px 20px; cursor: pointer; width: 100%; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div id="auth">
+        <div class="pin-display" id="pin-view">****</div>
+        <div class="numpad" id="numpad"></div>
+    </div>
+
+    <div id="panel">
+        <div class="left">
+            <button class="action" onclick="addNewCommand()">+ TẠO LỆNH MỚI</button>
+            <div id="cmd-list" style="margin-top: 20px;"></div>
+        </div>
+        <div class="right" id="editor">
+            <h3 id="edit-title">Chọn lệnh để sửa</h3>
+            <input type="text" id="in-name" placeholder="Tên lệnh (ví dụ: tpwalk)">
+            <input type="text" id="in-syntax" placeholder="Cú pháp (ví dụ: tpwalk <number>)">
+            <textarea id="in-desc" placeholder="Mô tả (ví dụ: Đi dịch chuyển)"></textarea>
+            <textarea id="in-code" placeholder="Mã Lua chạy trong Roblox" style="height: 150px; font-family: monospace;"></textarea>
+            <button class="action" style="background: #444;" onclick="deleteCmd()">XÓA LỆNH</button>
+        </div>
+    </div>
+
+    <script>
+        let pin = "";
+        let commands = []; // Load từ data.json
+        let currentIndex = -1;
+
+        // Xử lý mã PIN
+        const numpad = document.getElementById('numpad');
+        [1,2,3,4,5,6,7,8,9,'.','0','E'].forEach(v => {
+            let b = document.createElement('button');
+            b.className = 'num-btn';
+            b.innerText = v == '.' ? 'DEL' : (v == 'E' ? 'ENT' : v);
+            b.onclick = () => {
+                if(v == '.') pin = pin.slice(0,-1);
+                else if(v == 'E') { if(pin == "0904") { document.getElementById('auth').style.display='none'; document.getElementById('panel').style.display='grid'; loadData(); } else pin = ""; }
+                else if(pin.length < 4) pin += v;
+                document.getElementById('pin-view').innerText = "*".repeat(pin.length);
+            };
+            numpad.appendChild(b);
+        });
+
+        // Tương tác GitHub (Giả định Backend NodeJS xử lý API này)
+        async function loadData() {
+            // Fetch từ data.json trên Repo của ông
+            const res = await fetch('/api/get-commands'); 
+            commands = await res.json();
+            renderList();
+        }
+
+        function renderList() {
+            const list = document.getElementById('cmd-list');
+            list.innerHTML = "";
+            commands.forEach((cmd, i) => {
+                let d = document.createElement('div');
+                d.className = 'cmd-item';
+                d.innerText = cmd.name;
+                d.onclick = () => openEditor(i);
+                list.appendChild(d);
+            });
+        }
+
+        function openEditor(i) {
+            currentIndex = i;
+            const c = commands[i];
+            document.getElementById('edit-title').innerText = "Sửa: " + c.name;
+            document.getElementById('in-name').value = c.name;
+            document.getElementById('in-syntax').value = c.syntax;
+            document.getElementById('in-desc').value = c.desc;
+            document.getElementById('in-code').value = c.code;
+        }
+
+        // Tự động Save khi thay đổi
+        document.querySelectorAll('input, textarea').forEach(el => {
+            el.oninput = () => {
+                if(currentIndex == -1) return;
+                commands[currentIndex] = {
+                    name: document.getElementById('in-name').value,
+                    syntax: document.getElementById('in-syntax').value,
+                    desc: document.getElementById('in-desc').value,
+                    code: document.getElementById('in-code').value
+                };
+                saveToGithub();
+            };
+        });
+
+        async function saveToGithub() {
+            // Gửi dữ liệu về Server Railway để đẩy lên GitHub
+            await fetch('/api/save-commands', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(commands)
+            });
+        }
+
+        function addNewCommand() {
+            commands.push({name: "new_cmd", syntax: "cmd <val>", desc: "Mô tả", code: "-- lua code"});
+            renderList();
+        }
+    </script>
+</body>
+</html>
